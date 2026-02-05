@@ -7,10 +7,114 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+import plotly.io as pio
 import io
 import sys
 import tempfile
 import os
+
+
+def _plotly_to_png_bytes(fig, width, height):
+
+    img_bytes = None
+    metodo_exitoso = None
+
+    try:
+        print(f"[DEBUG] Intentando Método 1 (plotly.io.to_image)...", file=sys.stderr)
+        img_bytes = pio.to_image(
+            fig,
+            format="png",
+            width=int(width * 2),
+            height=int(height * 2)
+        )
+        if img_bytes:
+            metodo_exitoso = "plotly.io.to_image"
+            print(f"[DEBUG] ✓ Método 1 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+    except Exception as e1:
+        print(f"[DEBUG] ✗ Método 1 falló: {str(e1)[:120]}", file=sys.stderr)
+
+    if not img_bytes:
+        try:
+            print(f"[DEBUG] Intentando Método 2 (fig.to_image)...", file=sys.stderr)
+            img_bytes = fig.to_image(
+                format="png",
+                width=int(width * 2),
+                height=int(height * 2)
+            )
+            if img_bytes:
+                metodo_exitoso = "fig.to_image"
+                print(f"[DEBUG] ✓ Método 2 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+        except Exception as e2:
+            print(f"[DEBUG] ✗ Método 2 falló: {str(e2)[:120]}", file=sys.stderr)
+
+    if not img_bytes:
+        try:
+            print(f"[DEBUG] Intentando Método 3 (fig.to_image con engine='kaleido')...", file=sys.stderr)
+            img_bytes = fig.to_image(
+                format="png",
+                width=int(width * 2),
+                height=int(height * 2),
+                engine="kaleido"
+            )
+            if img_bytes:
+                metodo_exitoso = "fig.to_image (kaleido)"
+                print(f"[DEBUG] ✓ Método 3 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+        except Exception as e3:
+            print(f"[DEBUG] ✗ Método 3 falló: {str(e3)[:120]}", file=sys.stderr)
+
+    if not img_bytes:
+        try:
+            print(f"[DEBUG] Intentando Método 4 (write_image en buffer)...", file=sys.stderr)
+            temp_buffer = io.BytesIO()
+            fig.write_image(
+                temp_buffer,
+                format="png",
+                width=int(width * 2),
+                height=int(height * 2)
+            )
+            tamanio = temp_buffer.tell()
+            if tamanio > 0:
+                temp_buffer.seek(0)
+                img_bytes = temp_buffer.read()
+                metodo_exitoso = "write_image (buffer)"
+                print(f"[DEBUG] ✓ Método 4 exitoso ({tamanio} bytes)", file=sys.stderr)
+            else:
+                raise ValueError("write_image generó 0 bytes")
+        except Exception as e4:
+            print(f"[DEBUG] ✗ Método 4 falló: {str(e4)[:120]}", file=sys.stderr)
+
+    if not img_bytes:
+        try:
+            print(f"[DEBUG] Intentando Método 5 (archivo temporal)...", file=sys.stderr)
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                temp_path = tmp_file.name
+
+            fig.write_image(
+                temp_path,
+                format="png",
+                width=int(width * 2),
+                height=int(height * 2)
+            )
+
+            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+                with open(temp_path, 'rb') as f:
+                    img_bytes = f.read()
+                metodo_exitoso = "write_image (temp file)"
+                print(f"[DEBUG] ✓ Método 5 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+                os.unlink(temp_path)
+            else:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise ValueError("Archivo temporal vacío o no creado")
+        except Exception as e5:
+            print(f"[DEBUG] ✗ Método 5 falló: {str(e5)[:120]}", file=sys.stderr)
+            if 'temp_path' in locals() and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except:
+                    pass
+
+    return img_bytes, metodo_exitoso
 
 
 def insertar_grafico_plotly(fig, story, caption, width=450, height=250):
@@ -21,93 +125,7 @@ def insertar_grafico_plotly(fig, story, caption, width=450, height=250):
         story.append(Paragraph(f"<i>[Gráfico no disponible: {caption}]</i>", style_error))
         return False
     
-    img_bytes = None
-    metodo_exitoso = None
-    
-    try:
-        print(f"[DEBUG] Intentando Método 1 (to_image) para: {caption}", file=sys.stderr)
-        img_bytes = fig.to_image(
-            format="png", 
-            width=int(width * 2), 
-            height=int(height * 2), 
-            engine="kaleido"
-        )
-        if img_bytes and len(img_bytes) > 0:
-            metodo_exitoso = "to_image"
-            print(f"[DEBUG] ✓ Método 1 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-        else:
-            raise ValueError("to_image retornó vacío o None")
-    except Exception as e1:
-        print(f"[DEBUG] ✗ Método 1 falló: {str(e1)[:100]}", file=sys.stderr)
-    
-    if not img_bytes:
-        try:
-            print(f"[DEBUG] Intentando Método 2 (write_image en buffer)...", file=sys.stderr)
-            temp_buffer = io.BytesIO()
-            fig.write_image(
-                temp_buffer, 
-                format="png", 
-                width=int(width * 2), 
-                height=int(height * 2), 
-                engine="kaleido"
-            )
-            tamanio = temp_buffer.tell()
-            if tamanio > 0:
-                temp_buffer.seek(0)
-                img_bytes = temp_buffer.read()
-                metodo_exitoso = "write_image (buffer)"
-                print(f"[DEBUG] ✓ Método 2 exitoso ({tamanio} bytes)", file=sys.stderr)
-            else:
-                raise ValueError("write_image generó 0 bytes")
-        except Exception as e2:
-            print(f"[DEBUG] ✗ Método 2 falló: {str(e2)[:100]}", file=sys.stderr)
-    
-    if not img_bytes:
-        try:
-            print(f"[DEBUG] Intentando Método 3 (archivo temporal)...", file=sys.stderr)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                temp_path = tmp_file.name
-            
-            fig.write_image(
-                temp_path,
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2),
-                engine="kaleido"
-            )
-            
-            if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                with open(temp_path, 'rb') as f:
-                    img_bytes = f.read()
-                metodo_exitoso = "write_image (temp file)"
-                print(f"[DEBUG] ✓ Método 3 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-                os.unlink(temp_path)
-            else:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
-                raise ValueError("Archivo temporal vacío o no creado")
-        except Exception as e3:
-            print(f"[DEBUG] ✗ Método 3 falló: {str(e3)[:100]}", file=sys.stderr)
-            if 'temp_path' in locals() and os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except:
-                    pass
-    
-    if not img_bytes:
-        try:
-            print(f"[DEBUG] Intentando Método 4 (orca)...", file=sys.stderr)
-            img_bytes = fig.to_image(
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2),
-                engine="orca"
-            )
-            if img_bytes and len(img_bytes) > 0:
-                metodo_exitoso = "orca"
-                print(f"[DEBUG] ✓ Método 4 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-        except Exception as e4:
-            print(f"[DEBUG] ✗ Método 4 falló: {str(e4)[:100]}", file=sys.stderr)
+    img_bytes, metodo_exitoso = _plotly_to_png_bytes(fig, width, height)
     
     if img_bytes and len(img_bytes) > 0:
         try:
@@ -380,7 +398,7 @@ def generar_reporte_ejecutivo_pdf(df_filtrado, health_scores, metricas_calidad, 
         buffer.seek(0)
         print("[DEBUG] ✓ PDF generado exitosamente", file=sys.stderr)
         print("="*80 + "\n", file=sys.stderr)
-        return buffer
+        return buffer.getvalue()
     except Exception as e:
         print(f"[ERROR] Error al construir PDF: {e}", file=sys.stderr)
         import traceback
