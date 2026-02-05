@@ -13,27 +13,57 @@ import io
 import sys
 import tempfile
 import os
+import glob
+import shutil
+import platform
+
+
+def _resolve_chrome_executable():
+
+    env_path = os.environ.get("PLOTLY_CHROME_PATH")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    for cmd in ("google-chrome", "chrome", "chromium", "chromium-browser"):
+        cmd_path = shutil.which(cmd)
+        if cmd_path:
+            return cmd_path
+
+    if platform.system().lower() == "darwin":
+        app_candidates = [
+            "/Applications/Google Chrome.app",
+            "/Applications/Google Chrome Beta.app",
+            "/Applications/Google Chrome Canary.app",
+            "/Applications/Chromium.app",
+            os.path.expanduser("~/Applications/Google Chrome.app"),
+            os.path.expanduser("~/Applications/Chromium.app")
+        ]
+
+        for app_path in app_candidates:
+            exec_path = os.path.join(app_path, "Contents", "MacOS", os.path.basename(app_path).replace(".app", ""))
+            if os.path.exists(exec_path):
+                return exec_path
+
+        for app_path in glob.glob("/Applications/Google Chrome*.app"):
+            exec_path = os.path.join(app_path, "Contents", "MacOS", os.path.basename(app_path).replace(".app", ""))
+            if os.path.exists(exec_path):
+                return exec_path
+
+    return None
 
 
 def _configure_kaleido_chrome():
 
-    chrome_candidates = [
-        os.environ.get("PLOTLY_CHROME_PATH"),
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
-        "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-        "/Applications/Chromium.app/Contents/MacOS/Chromium"
-    ]
-
-    chrome_path = next((p for p in chrome_candidates if p and os.path.exists(p)), None)
+    chrome_path = _resolve_chrome_executable()
     if chrome_path:
         try:
             pio.kaleido.scope.chromium = chrome_path
+            os.environ["PLOTLY_CHROME_PATH"] = chrome_path
             print(f"[DEBUG] Kaleido usando Chrome: {chrome_path}", file=sys.stderr)
         except Exception as e:
             print(f"[DEBUG] No se pudo configurar ruta de Chrome en Kaleido: {e}", file=sys.stderr)
     else:
-        print("[DEBUG] No se encontró Chrome/Chromium en rutas conocidas.", file=sys.stderr)
+        print("[DEBUG] No se encontró Chrome/Chromium en rutas conocidas ni en PATH.", file=sys.stderr)
 
 
 def _plotly_to_png_bytes(fig, width, height):
@@ -138,7 +168,80 @@ def _plotly_to_png_bytes(fig, width, height):
                 except:
                     pass
 
+    if not img_bytes:
+        try:
+            print("[DEBUG] Intentando Método 6 (fallback Matplotlib)...", file=sys.stderr)
+            img_bytes, metodo_exitoso = _plotly_to_png_bytes_fallback(fig, width, height)
+            if img_bytes:
+                print(f"[DEBUG] ✓ Método 6 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+        except Exception as e6:
+            print(f"[DEBUG] ✗ Método 6 falló: {str(e6)[:120]}", file=sys.stderr)
+
     return img_bytes, metodo_exitoso
+
+
+def _plotly_to_png_bytes_fallback(fig, width, height):
+
+    try:
+        import matplotlib.pyplot as plt
+    except Exception as e:
+        print(f"[DEBUG] Matplotlib no disponible: {e}", file=sys.stderr)
+        return None, None
+
+    fig_dict = fig.to_dict() if hasattr(fig, "to_dict") else {}
+    traces = fig_dict.get("data", [])
+    layout = fig_dict.get("layout", {})
+
+    if not traces:
+        return None, None
+
+    fig_w = max(width / 100, 3.0)
+    fig_h = max(height / 100, 2.0)
+
+    mpl_fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=100)
+
+    for trace in traces:
+        ttype = trace.get("type", "scatter")
+        if ttype == "bar":
+            x = trace.get("x", [])
+            y = trace.get("y", [])
+            orientation = trace.get("orientation", "v")
+            if orientation == "h":
+                ax.barh(y, x, color="#1f4e78")
+            else:
+                ax.bar(x, y, color="#1f4e78")
+        elif ttype == "scatter":
+            x = trace.get("x", [])
+            y = trace.get("y", [])
+            mode = trace.get("mode", "markers")
+            if "lines" in mode:
+                ax.plot(x, y, marker="o" if "markers" in mode else None, color="#1f4e78")
+            else:
+                ax.scatter(x, y, color="#1f4e78")
+        elif ttype == "pie":
+            labels = trace.get("labels", [])
+            values = trace.get("values", [])
+            ax.pie(values, labels=labels, autopct="%1.1f%%")
+        else:
+            x = trace.get("x", [])
+            y = trace.get("y", [])
+            if x and y:
+                ax.plot(x, y, color="#1f4e78")
+
+    title = layout.get("title", "")
+    if isinstance(title, dict):
+        title = title.get("text", "")
+    if title:
+        ax.set_title(title)
+
+    ax.grid(True, alpha=0.2)
+    plt.tight_layout()
+
+    buffer = io.BytesIO()
+    mpl_fig.savefig(buffer, format="png", bbox_inches="tight")
+    plt.close(mpl_fig)
+    buffer.seek(0)
+    return buffer.read(), "matplotlib"
 
 
 def insertar_grafico_plotly(fig, story, caption, width=450, height=250):
