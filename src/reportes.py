@@ -413,14 +413,7 @@ def generar_reporte_ejecutivo_pdf(df_filtrado, health_scores, metricas_calidad, 
 
     story.append(Paragraph(f"<b>Diagnóstico de Venta Invisible:</b> Impacto financiero de <b>USD ${ingreso_riesgo:,.2f}</b> ({porcentaje_riesgo}% del total) por SKUs no catalogados.", style_body))
     
-    # ⭐ INSERCIÓN DEL GRÁFICO DE CIUDADES ⭐
-    insertar_grafico_plotly(
-        fig_ciudades,
-        story,
-        "Figura 1: Top 10 Ciudades con Mayor Fuga por Venta Invisible",
-        width=450,
-        height=250
-    )
+    # (Gráficas omitidas en el PDF por requerimiento)
 
     data_inv = [
         ["Métrica de Riesgo", "Valor Detectado"],
@@ -511,14 +504,7 @@ def generar_reporte_ejecutivo_pdf(df_filtrado, health_scores, metricas_calidad, 
     
     story.append(Paragraph(f"<b>Diagnóstico de Gestión:</b> Las bodegas como <b>OCCIDENTE</b> y <b>BOD-EXT-99</b> operan prácticamente 'a ciegas'. La falta de revisión genera inconsistencias que disparan los tickets de soporte, degradando la confianza operativa.", style_body))
 
-    # ⭐ INSERCIÓN DEL GRÁFICO DE RIESGO OPERATIVO ⭐
-    insertar_grafico_plotly(
-        fig_riesgo,
-        story,
-        "Figura 2: Impacto del Descuido Operativo por Bodega",
-        width=450,
-        height=250
-    )
+    # (Gráficas omitidas en el PDF por requerimiento)
 
     # Construir PDF
     print("\n[DEBUG] Construyendo documento PDF...", file=sys.stderr)

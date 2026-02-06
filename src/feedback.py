@@ -48,18 +48,25 @@ def procesar_feedback(ruta_csv):
     )
 
     # 5. Limpieza de Rating_Producto
-    df_feedback["Rating_Producto"] = pd.to_numeric(df_feedback["Rating_Producto"], errors='coerce')
-    
+    rating_raw = pd.to_numeric(df_feedback["Rating_Producto"], errors='coerce')
+    mask_rating_outlier = rating_raw > 5
+    mask_rating_nulo = rating_raw.isna()
+    ratings_corregidos = int((mask_rating_outlier | mask_rating_nulo).sum())
+
+    df_feedback["Rating_Producto"] = rating_raw
+
     # Outlier handling (> 5)
-    df_feedback.loc[df_feedback["Rating_Producto"] > 5, "Rating_Producto"] = np.nan
-    
+    df_feedback.loc[mask_rating_outlier, "Rating_Producto"] = np.nan
+
     # Mediana robusta
     mediana_rating = df_feedback["Rating_Producto"].median()
     valor_relleno_rating = mediana_rating if not pd.isna(mediana_rating) else 3.0
     df_feedback["Rating_Producto"] = df_feedback["Rating_Producto"].fillna(valor_relleno_rating)
 
     # 6. Limpieza de Edad y Soporte
-    df_feedback["Edad_Cliente"] = pd.to_numeric(df_feedback["Edad_Cliente"], errors='coerce').fillna(35)
+    edad_raw = pd.to_numeric(df_feedback["Edad_Cliente"], errors='coerce')
+    edades_corregidas = int(edad_raw.isna().sum())
+    df_feedback["Edad_Cliente"] = edad_raw.fillna(35)
     
     soporte_raw = df_feedback["Ticket_Soporte_Abierto"].astype(str).str.strip().str.upper()
     
@@ -77,7 +84,9 @@ def procesar_feedback(ruta_csv):
         "health_score_antes": salud_antes[0],
         "health_score_despues": salud_despues[0],
         "nps_promedio": round(df_feedback["NPS_Numerico"].mean(), 2),
-        "rating_mediana": round(valor_relleno_rating, 2)
+        "rating_mediana": round(valor_relleno_rating, 2),
+        "edades_corregidas": edades_corregidas,
+        "ratings_corregidos": ratings_corregidos
     }
 
     return df_feedback, metricas

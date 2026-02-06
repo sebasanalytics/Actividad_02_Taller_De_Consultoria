@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from src.reportes import generar_reporte_ejecutivo_pdf
 
 def mostrar_resumen_ejecutivo(df_filtrado, health_scores, metricas_calidad):
 

@@ -42,7 +42,9 @@ def procesar_transacciones(ruta_csv, df_inventario, df_feedback):
     
     # Convertimos a numérico y gestionamos el outlier '999' detectado en el CSV maestro
     df_trans['Tiempo_Entrega'] = pd.to_numeric(df_trans['Tiempo_Entrega'], errors='coerce')
-    df_trans.loc[df_trans['Tiempo_Entrega'] > 100, 'Tiempo_Entrega'] = np.nan 
+    mask_tiempos_outliers = df_trans['Tiempo_Entrega'] > 100
+    tiempos_outliers = int(mask_tiempos_outliers.sum())
+    df_trans.loc[mask_tiempos_outliers, 'Tiempo_Entrega'] = np.nan 
 
     df_trans['Precio_Venta_Final'] = pd.to_numeric(df_trans['Precio_Venta_Final'], errors='coerce').fillna(0)
     df_trans['Costo_Envio'] = pd.to_numeric(df_trans['Costo_Envio'], errors='coerce').fillna(0)
@@ -51,10 +53,16 @@ def procesar_transacciones(ruta_csv, df_inventario, df_feedback):
     salud_antes = (100, 0, 0)
     salud_despues = (100, 0, 0)
 
+    skus_sin_inventario = 0
+    if "SKU_ID" in df_trans.columns and "SKU_ID" in df_inventario.columns:
+        skus_sin_inventario = int((~df_trans["SKU_ID"].isin(df_inventario["SKU_ID"])).sum())
+
     metricas = {
         "health_score_antes": salud_antes[0],
         "health_score_despues": salud_despues[0],
-        "total_transacciones": len(df_trans)
+        "total_transacciones": len(df_trans),
+        "tiempos_outliers": tiempos_outliers,
+        "skus_sin_inventario": skus_sin_inventario
     }
 
     return df_trans, metricas
