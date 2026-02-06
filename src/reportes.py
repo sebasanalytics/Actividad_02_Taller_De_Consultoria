@@ -7,175 +7,89 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.utils import ImageReader
 import plotly.io as pio
 import io
 import sys
 import tempfile
 import os
-import glob
-import shutil
-import platform
-
-
-def _resolve_chrome_executable():
-
-    env_path = os.environ.get("PLOTLY_CHROME_PATH")
-    if env_path and os.path.exists(env_path):
-        return env_path
-
-    for cmd in ("google-chrome", "chrome", "chromium", "chromium-browser"):
-        cmd_path = shutil.which(cmd)
-        if cmd_path:
-            return cmd_path
-
-    if platform.system().lower() == "darwin":
-        app_candidates = [
-            "/Applications/Google Chrome.app",
-            "/Applications/Google Chrome Beta.app",
-            "/Applications/Google Chrome Canary.app",
-            "/Applications/Chromium.app",
-            os.path.expanduser("~/Applications/Google Chrome.app"),
-            os.path.expanduser("~/Applications/Chromium.app")
-        ]
-
-        for app_path in app_candidates:
-            exec_path = os.path.join(app_path, "Contents", "MacOS", os.path.basename(app_path).replace(".app", ""))
-            if os.path.exists(exec_path):
-                return exec_path
-
-        for app_path in glob.glob("/Applications/Google Chrome*.app"):
-            exec_path = os.path.join(app_path, "Contents", "MacOS", os.path.basename(app_path).replace(".app", ""))
-            if os.path.exists(exec_path):
-                return exec_path
-
-    return None
-
-
-def _configure_kaleido_chrome():
-
-    chrome_path = _resolve_chrome_executable()
-    if chrome_path:
-        try:
-            pio.kaleido.scope.chromium = chrome_path
-            os.environ["PLOTLY_CHROME_PATH"] = chrome_path
-            print(f"[DEBUG] Kaleido usando Chrome: {chrome_path}", file=sys.stderr)
-        except Exception as e:
-            print(f"[DEBUG] No se pudo configurar ruta de Chrome en Kaleido: {e}", file=sys.stderr)
-    else:
-        print("[DEBUG] No se encontró Chrome/Chromium en rutas conocidas ni en PATH.", file=sys.stderr)
 
 
 def _plotly_to_png_bytes(fig, width, height):
+    """Convierte una figura Plotly a bytes PNG.
 
-    _configure_kaleido_chrome()
+    Plotly 6.x incluye soporte nativo de exportación de imágenes
+    (kaleido integrado), por lo que no se requiere el paquete
+    externo ``kaleido`` ni configurar rutas de Chrome.
+    """
 
     img_bytes = None
     metodo_exitoso = None
+    render_w = int(width * 2)
+    render_h = int(height * 2)
 
+    # ── Método 1: fig.to_image (plotly 6.x nativo) ──────────────
     try:
-        print(f"[DEBUG] Intentando Método 1 (plotly.io.to_image)...", file=sys.stderr)
-        img_bytes = pio.to_image(
-            fig,
+        print("[DEBUG] Intentando Método 1 (fig.to_image)...", file=sys.stderr)
+        img_bytes = fig.to_image(
             format="png",
-            width=int(width * 2),
-            height=int(height * 2)
+            width=render_w,
+            height=render_h,
         )
         if img_bytes:
-            metodo_exitoso = "plotly.io.to_image"
+            metodo_exitoso = "fig.to_image"
             print(f"[DEBUG] ✓ Método 1 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
     except Exception as e1:
-        print(f"[DEBUG] ✗ Método 1 falló: {str(e1)[:120]}", file=sys.stderr)
+        print(f"[DEBUG] ✗ Método 1 falló: {str(e1)[:200]}", file=sys.stderr)
 
+    # ── Método 2: write_image a BytesIO ─────────────────────────
     if not img_bytes:
         try:
-            print(f"[DEBUG] Intentando Método 2 (fig.to_image)...", file=sys.stderr)
-            img_bytes = fig.to_image(
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2)
-            )
-            if img_bytes:
-                metodo_exitoso = "fig.to_image"
-                print(f"[DEBUG] ✓ Método 2 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-        except Exception as e2:
-            print(f"[DEBUG] ✗ Método 2 falló: {str(e2)[:120]}", file=sys.stderr)
-
-    if not img_bytes:
-        try:
-            print(f"[DEBUG] Intentando Método 3 (fig.to_image con engine='kaleido')...", file=sys.stderr)
-            img_bytes = fig.to_image(
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2),
-                engine="kaleido"
-            )
-            if img_bytes:
-                metodo_exitoso = "fig.to_image (kaleido)"
-                print(f"[DEBUG] ✓ Método 3 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-        except Exception as e3:
-            print(f"[DEBUG] ✗ Método 3 falló: {str(e3)[:120]}", file=sys.stderr)
-
-    if not img_bytes:
-        try:
-            print(f"[DEBUG] Intentando Método 4 (write_image en buffer)...", file=sys.stderr)
-            temp_buffer = io.BytesIO()
-            fig.write_image(
-                temp_buffer,
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2)
-            )
-            tamanio = temp_buffer.tell()
-            if tamanio > 0:
-                temp_buffer.seek(0)
-                img_bytes = temp_buffer.read()
+            print("[DEBUG] Intentando Método 2 (write_image → BytesIO)...", file=sys.stderr)
+            buf = io.BytesIO()
+            fig.write_image(buf, format="png", width=render_w, height=render_h)
+            if buf.tell() > 0:
+                buf.seek(0)
+                img_bytes = buf.read()
                 metodo_exitoso = "write_image (buffer)"
-                print(f"[DEBUG] ✓ Método 4 exitoso ({tamanio} bytes)", file=sys.stderr)
+                print(f"[DEBUG] ✓ Método 2 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
             else:
                 raise ValueError("write_image generó 0 bytes")
-        except Exception as e4:
-            print(f"[DEBUG] ✗ Método 4 falló: {str(e4)[:120]}", file=sys.stderr)
+        except Exception as e2:
+            print(f"[DEBUG] ✗ Método 2 falló: {str(e2)[:200]}", file=sys.stderr)
 
+    # ── Método 3: write_image a archivo temporal ────────────────
     if not img_bytes:
+        temp_path = None
         try:
-            print(f"[DEBUG] Intentando Método 5 (archivo temporal)...", file=sys.stderr)
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                temp_path = tmp_file.name
-
-            fig.write_image(
-                temp_path,
-                format="png",
-                width=int(width * 2),
-                height=int(height * 2)
-            )
-
+            print("[DEBUG] Intentando Método 3 (write_image → archivo temporal)...", file=sys.stderr)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                temp_path = tmp.name
+            fig.write_image(temp_path, format="png", width=render_w, height=render_h)
             if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
-                with open(temp_path, 'rb') as f:
+                with open(temp_path, "rb") as f:
                     img_bytes = f.read()
                 metodo_exitoso = "write_image (temp file)"
-                print(f"[DEBUG] ✓ Método 5 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-                os.unlink(temp_path)
+                print(f"[DEBUG] ✓ Método 3 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
             else:
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
                 raise ValueError("Archivo temporal vacío o no creado")
-        except Exception as e5:
-            print(f"[DEBUG] ✗ Método 5 falló: {str(e5)[:120]}", file=sys.stderr)
-            if 'temp_path' in locals() and os.path.exists(temp_path):
+        except Exception as e3:
+            print(f"[DEBUG] ✗ Método 3 falló: {str(e3)[:200]}", file=sys.stderr)
+        finally:
+            if temp_path and os.path.exists(temp_path):
                 try:
                     os.unlink(temp_path)
-                except:
+                except OSError:
                     pass
 
+    # ── Método 4: fallback con Matplotlib ───────────────────────
     if not img_bytes:
         try:
-            print("[DEBUG] Intentando Método 6 (fallback Matplotlib)...", file=sys.stderr)
+            print("[DEBUG] Intentando Método 4 (fallback Matplotlib)...", file=sys.stderr)
             img_bytes, metodo_exitoso = _plotly_to_png_bytes_fallback(fig, width, height)
             if img_bytes:
-                print(f"[DEBUG] ✓ Método 6 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
-        except Exception as e6:
-            print(f"[DEBUG] ✗ Método 6 falló: {str(e6)[:120]}", file=sys.stderr)
+                print(f"[DEBUG] ✓ Método 4 exitoso ({len(img_bytes)} bytes)", file=sys.stderr)
+        except Exception as e4:
+            print(f"[DEBUG] ✗ Método 4 falló: {str(e4)[:200]}", file=sys.stderr)
 
     return img_bytes, metodo_exitoso
 
@@ -183,6 +97,8 @@ def _plotly_to_png_bytes(fig, width, height):
 def _plotly_to_png_bytes_fallback(fig, width, height):
 
     try:
+        import matplotlib
+        matplotlib.use("Agg")  # Backend sin GUI – necesario en Streamlit / headless
         import matplotlib.pyplot as plt
     except Exception as e:
         print(f"[DEBUG] Matplotlib no disponible: {e}", file=sys.stderr)
@@ -259,8 +175,8 @@ def insertar_grafico_plotly(fig, story, caption, width=450, height=250):
             print(f"[DEBUG] Insertando imagen en PDF (método: {metodo_exitoso})...", file=sys.stderr)
             img_buffer = io.BytesIO(img_bytes)
             img_buffer.seek(0)
-            img_reader = ImageReader(img_buffer)
-            img_pdf = Image(img_reader, width=width, height=height)
+            # ReportLab 4.x: Image acepta BytesIO directamente (no ImageReader)
+            img_pdf = Image(img_buffer, width=width, height=height)
             img_pdf.hAlign = 'CENTER'
             
             story.append(Spacer(1, 12))
