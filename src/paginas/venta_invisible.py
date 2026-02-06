@@ -62,7 +62,7 @@ def construir_fig_venta_invisible(df_filtrado: pd.DataFrame):
     )
 
     fig.update_traces(
-        marker_color="#1f4e78",          
+        marker_color="#1f4e78",
         texttemplate="$%{x:,.0f}",
         textposition="outside"
     )
@@ -121,8 +121,10 @@ def mostrar_venta_invisible(df_filtrado: pd.DataFrame, renderizar: bool = True):
             st.metric(
                 "💰 Ingreso en Riesgo (USD)",
                 f"${ingreso_riesgo:,.2f}",
-                delta=f"{pct_ingreso_riesgo:.1f}% del Total",
-                delta_color="inverse"
+            )
+            st.markdown(
+                f"<div class='kpi-percentage'>{pct_ingreso_riesgo:.1f}% del Total</div>",
+                unsafe_allow_html=True,
             )
         with col2:
             st.metric("🆔 SKUs No Catalogados", f"{skus_huerfanos}")
@@ -152,6 +154,8 @@ def mostrar_venta_invisible(df_filtrado: pd.DataFrame, renderizar: bool = True):
                 labels={"ingreso_total": "Ingresos (USD)", "Fecha_Venta": "Mes"},
                 markers=True
             )
+            fig_line.update_traces(line=dict(color="#2e75b6", width=2))
+            fig_line.update_layout(margin=dict(l=40, r=20, t=50, b=40))
 
             st.plotly_chart(fig_line, use_container_width=True)
         else:
@@ -179,7 +183,8 @@ def mostrar_venta_invisible(df_filtrado: pd.DataFrame, renderizar: bool = True):
                 fig_pie = px.pie(
                     values=fuga_canal.values,
                     names=fuga_canal.index,
-                    title=f"Distribución por {col_ref}"
+                    title=f"Distribución por {col_ref}",
+                    color_discrete_sequence=["#1f4e78", "#2e75b6", "#00a1d6", "#7f3fbf", "#f39c12", "#c0392b"]
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
             else:

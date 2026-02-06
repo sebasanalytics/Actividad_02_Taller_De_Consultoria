@@ -158,6 +158,8 @@ def procesar_inventario(inventario_path: str) -> tuple:
         "mejora_health_score": round(health_despues - health_antes, 2),
         "costos_outliers_detectados": int(costos_outliers_total),
         "stock_negativos_corregidos": int(stock_negativos),
+        "costos_outliers": int(costos_outliers_total),
+        "stock_negativos": int(stock_negativos),
         "duplicados_sku_id": int(df_inventario.duplicated(subset=["SKU_ID"]).sum()),
         "valor_inventario_total": f"${(df_inventario['Stock_Actual'] * df_inventario['Costo_Unitario_USD']).sum():,.2f}",
         "rango_costos_final": f"${df_inventario['Costo_Unitario_USD'].min():.2f} - ${df_inventario['Costo_Unitario_USD'].max():.2f}"

@@ -85,7 +85,8 @@ def construir_fig_riesgo_operativo(df_filtrado: pd.DataFrame):
         color="Ticket_Soporte",
         hover_name="Bodega_Origen",
         hover_data={"NPS_Numerico": ":.2f"},
-        color_continuous_scale="Reds",
+        color_continuous_scale="OrRd",
+        size_max=35,
         labels={
             "dias_sin_revision": "Días desde Última Revisión",
             "Ticket_Soporte": "% Tasa Soporte",

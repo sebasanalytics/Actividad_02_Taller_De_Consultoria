@@ -178,10 +178,16 @@ def procesar_transacciones(ruta_csv, df_inventario, df_feedback):
     salud_antes = (100, 0, 0)
     salud_despues = (100, 0, 0)
 
+    skus_sin_inventario = 0
+    if "SKU_ID" in df_trans.columns and "SKU_ID" in df_inventario.columns:
+        skus_sin_inventario = int((~df_trans["SKU_ID"].isin(df_inventario["SKU_ID"])).sum())
+
     metricas = {
         "health_score_antes": salud_antes[0],
         "health_score_despues": salud_despues[0],
-        "total_transacciones": len(df_trans)
+        "total_transacciones": len(df_trans),
+        "tiempos_outliers": tiempos_outliers,
+        "skus_sin_inventario": skus_sin_inventario
     }
   
     return df_trans, metricas
