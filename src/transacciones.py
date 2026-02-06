@@ -186,7 +186,7 @@ def procesar_transacciones(ruta_csv, df_inventario, df_feedback):
         "health_score_antes": salud_antes[0],
         "health_score_despues": salud_despues[0],
         "total_transacciones": len(df_trans),
-        "tiempos_outliers": tiempos_outliers,
+        # "tiempos_outliers": tiempos_outliers,
         "skus_sin_inventario": skus_sin_inventario
     }
   
